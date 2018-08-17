@@ -1,3 +1,13 @@
+buildscript {
+    repositories {
+        jcenter()
+    }
+
+    dependencies {
+        classpath "org.jetbrains.dokka:dokka-gradle-plugin:0.9.17"
+    }
+}
+
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.2.60'
 }
@@ -18,6 +28,34 @@ compileTestKotlin {
         jvmTarget = "1.8"
     }
 }
+
+// Publish locally
+apply plugin: 'maven-publish'
+
+// Enable code coverage
+apply plugin: 'jacoco'
+
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
+
+group = "de.difuture.ekut.pht"
+version = "0.0.1-SNAPSHOT"
+
+
+jacocoTestReport {
+    reports {
+        xml.enabled = true
+        html.enabled = true
+    }
+}
+check.dependsOn jacocoTestReport
+
 dependencies {
     // The JVM PHT library
     compile group: 'de.difuture.ekut.pht', name: 'library', version: '0.0.1-SNAPSHOT'
