@@ -205,6 +205,13 @@ class DockerClientImpl(private val baseClient : DockerClient) : IDockerClient {
             }
             // Now fetch the container exit
             val exit = baseClient.waitContainer(containerId)
+
+            // Remove the container if this was requested
+            if (rm) {
+
+                baseClient.removeContainer(containerId)
+            }
+
             return DockerContainerOutput(
                     containerIdObj,
                     exit.statusCode(),
@@ -218,7 +225,7 @@ class DockerClientImpl(private val baseClient : DockerClient) : IDockerClient {
 
         } catch (ex : ContainerNotFoundException){
 
-            throw NoSuchDockerContainerException("Apparently the created container was deleted before it could be started")
+            throw NoSuchDockerContainerException("Apparently the created container was deleted before it could be started or be removed by this method")
 
         } catch (ex : DockerException) {
 
