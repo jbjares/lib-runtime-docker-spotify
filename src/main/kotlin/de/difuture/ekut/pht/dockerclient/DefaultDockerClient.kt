@@ -158,6 +158,7 @@ class DefaultDockerClient(private val baseClient : DockerClient) : IDockerClient
         // Configuration for the Container Creation, currently only takes the Image Id
         val config = ContainerConfig.builder()
                 .image(imageId.repr)
+                .cmd(commands)
                 .env(envList)
                 .build()
 

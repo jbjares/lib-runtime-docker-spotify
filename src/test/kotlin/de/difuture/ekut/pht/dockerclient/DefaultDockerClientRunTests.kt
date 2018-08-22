@@ -31,7 +31,6 @@ class DefaultDockerClientRunTests {
                 ALPINE_IMAGE,
                 LATEST_TAG
         )
-        println(image)
         this.client.run(image, emptyList(), true)
     }
 }
