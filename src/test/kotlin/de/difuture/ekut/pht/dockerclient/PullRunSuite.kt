@@ -14,6 +14,6 @@ import org.junit.runners.Suite.SuiteClasses
  * @
  *
  */
-@SuiteClasses(DockerClientImplPullTests::class, DockerClientImplRunTests::class)
+@SuiteClasses(DefaultDockerClientPullTests::class, DefaultDockerClientRunTests::class)
 @RunWith(Suite::class)
 class PullRunSuite

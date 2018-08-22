@@ -1,13 +1,13 @@
 package de.difuture.ekut.pht.dockerclient
 
 import com.spotify.docker.client.DefaultDockerClient
-import de.difuture.ekut.pht.lib.runtime.IDockerClient
 import org.junit.Test
 import com.natpryce.hamkrest.assertion.assert
 import com.natpryce.hamkrest.isIn
+import de.difuture.ekut.pht.lib.runtime.docker.IDockerClient
 import org.junit.Before
 
-class DockerClientImplPullTests {
+class DefaultDockerClientPullTests {
 
     private lateinit var client : IDockerClient
 

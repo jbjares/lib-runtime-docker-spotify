@@ -8,6 +8,8 @@ import com.spotify.docker.client.messages.Container
 import com.spotify.docker.client.messages.ContainerConfig
 import de.difuture.ekut.pht.lib.common.docker.*
 import de.difuture.ekut.pht.lib.runtime.*
+import de.difuture.ekut.pht.lib.runtime.docker.DockerContainerOutput
+import de.difuture.ekut.pht.lib.runtime.docker.IDockerClient
 
 
 /**
@@ -206,6 +208,9 @@ class DefaultDockerClient(private val baseClient : DockerClient) : IDockerClient
             // Now fetch the container exit
             val exit = baseClient.waitContainer(containerId)
 
+            val stdout = baseClient.logs(containerId, DockerClient.LogsParam.stdout()).readFully()
+            val stderr = baseClient.logs(containerId, DockerClient.LogsParam.stderr()).readFully()
+
             // Remove the container if this was requested
             if (rm) {
 
@@ -215,9 +220,8 @@ class DefaultDockerClient(private val baseClient : DockerClient) : IDockerClient
             return DockerContainerOutput(
                     containerIdObj,
                     exit.statusCode(),
-                    baseClient.logs(containerId, DockerClient.LogsParam.stdout()).readFully(),
-                    baseClient.logs(containerId, DockerClient.LogsParam.stderr()).readFully()
-            )
+                    stdout,
+                    stderr)
         // Rethrow as NoSuchImageException
         } catch (ex : ImageNotFoundException) {
 

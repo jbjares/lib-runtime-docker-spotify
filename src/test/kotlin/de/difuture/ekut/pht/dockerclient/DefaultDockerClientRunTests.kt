@@ -1,7 +1,7 @@
 package de.difuture.ekut.pht.dockerclient
 
 import com.spotify.docker.client.DefaultDockerClient
-import de.difuture.ekut.pht.lib.runtime.IDockerClient
+import de.difuture.ekut.pht.lib.runtime.docker.IDockerClient
 import org.junit.Before
 import org.junit.Test
 
@@ -14,7 +14,7 @@ import org.junit.Test
  * @since 0.0.1
  *
  */
-class DockerClientImplRunTests {
+class DefaultDockerClientRunTests {
 
     private lateinit var client : IDockerClient
 
@@ -31,6 +31,7 @@ class DockerClientImplRunTests {
                 ALPINE_IMAGE,
                 LATEST_TAG
         )
+        println(image)
         this.client.run(image, emptyList(), true)
     }
 }
