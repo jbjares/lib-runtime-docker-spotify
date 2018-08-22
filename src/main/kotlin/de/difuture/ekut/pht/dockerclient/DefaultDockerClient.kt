@@ -21,7 +21,7 @@ import de.difuture.ekut.pht.lib.runtime.*
  * @since 0.0.1
  *
  */
-class DockerClientImpl(private val baseClient : DockerClient) : IDockerClient {
+class DefaultDockerClient(private val baseClient : DockerClient) : IDockerClient {
 
 
     private fun repoTagToImageId(repoTag : String) : DockerImageId {

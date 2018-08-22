@@ -7,10 +7,10 @@ import org.junit.Test
 
 
 /**
- * Class that is particularly meant to test the run method of [DockerClientImpl]
+ * Class that is particularly meant to test the run method of [DefaultDockerClient]
  *
  * @author Lukas Zimmermann
- * @see DockerClientImpl
+ * @see DefaultDockerClient
  * @since 0.0.1
  *
  */
@@ -21,7 +21,7 @@ class DockerClientImplRunTests {
     @Before
     fun before() {
 
-        this.client = DockerClientImpl(DefaultDockerClient.fromEnv().build())
+        this.client = DefaultDockerClient(DefaultDockerClient.fromEnv().build())
     }
 
     @Test

@@ -14,7 +14,7 @@ class DockerClientImplPullTests {
     @Before
     fun before() {
 
-        this.client = DockerClientImpl(DefaultDockerClient.fromEnv().build())
+        this.client = DefaultDockerClient(DefaultDockerClient.fromEnv().build())
     }
 
 
