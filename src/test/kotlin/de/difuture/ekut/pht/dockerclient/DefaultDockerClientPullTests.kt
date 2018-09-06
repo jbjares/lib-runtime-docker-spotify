@@ -9,14 +9,13 @@ import org.junit.Before
 
 class DefaultDockerClientPullTests {
 
-    private lateinit var client : IDockerClient
+    private lateinit var client: IDockerClient
 
     @Before
     fun before() {
 
         this.client = DefaultDockerClient(DefaultDockerClient.fromEnv().build())
     }
-
 
     // Tests pull several image and ensure that the image id can be listed
 
@@ -28,5 +27,4 @@ class DefaultDockerClientPullTests {
         )
         assert.that(imageId, isIn(client.images()))
     }
-
 }

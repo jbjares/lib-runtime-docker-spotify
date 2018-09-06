@@ -1,23 +1,30 @@
 buildscript {
-    repositories {
-        jcenter()
-    }
-
     dependencies {
         classpath "org.jetbrains.dokka:dokka-gradle-plugin:0.9.17"
     }
 }
 
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '1.2.60'
+    id 'org.jetbrains.kotlin.jvm' version '1.2.61'
+
+    // Needed so we can resolve the test library from the artifactory
+    id "com.jfrog.artifactory" version "4.7.5"
 }
+
+configurations {
+    ktlint
+}
+
 repositories {
+    jcenter()
     mavenCentral()
-    mavenLocal()
+
+    // The Artifactory for the PHT project
+    maven {
+        url "https://artifactory.difuture.de/pht"
+    }
 }
-dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-}
+
 compileKotlin {
     kotlinOptions {
         jvmTarget = "1.8"
@@ -29,38 +36,96 @@ compileTestKotlin {
     }
 }
 
-// Publish locally
-apply plugin: 'maven-publish'
+dependencies {
+    // The linter
+    ktlint "com.github.shyiko:ktlint:0.28.0"
 
-// Enable code coverage
-apply plugin: 'jacoco'
+    // The PHT Library
+    compile group: 'de.difuture.ekut.pht', name: 'lib', version: '0.0.1'
+
+    // The standard lib
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.2.61"
+
+    // The Spotify Docker Client
+    compile group: 'com.spotify', name: 'docker-client', version: '8.11.7'
+
+    // Testing
+    testCompile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.6'
+    testCompile group: 'io.github.benas', name: 'random-beans', version: '3.7.0'
+    testCompile group: 'com.natpryce', name: 'hamkrest', version: '1.5.0.0'
+    testCompile group: 'de.difuture.ekut.pht.test', name: 'lib', version: '0.0.2'
+}
+
+apply plugin: 'maven-publish'
+apply plugin: 'org.jetbrains.dokka'
+
+group = "de.difuture.ekut.pht"
+version = "0.0.1"
 
 
 publishing {
     publications {
-        mavenJava(MavenPublication) {
+        maven(MavenPublication) {
             from components.java
+            version '0.0.1'
+            pom.withXml {
+                asNode().dependencies.'*'.findAll() {
+                    it.scope.text() == 'runtime' && project.configurations.compile.allDependencies.find { dep ->
+                        dep.name == it.artifactId.text()
+                    }
+                }.each() {
+                    it.scope*.value = 'compile'
+                }
+            }
         }
     }
 }
 
-group = "de.difuture.ekut.pht"
-version = "0.0.1-SNAPSHOT"
-
-
-jacocoTestReport {
-    reports {
-        xml.enabled = true
-        html.enabled = true
+model {
+    tasks.generatePomFileForMavenPublication {
+        destination = file("$buildDir/libs/docker-client-implementation-0.0.1.pom")
     }
 }
-check.dependsOn jacocoTestReport
 
-dependencies {
-    // The JVM PHT library
-    compile group: 'de.difuture.ekut.pht', name: 'library', version: '0.0.1-SNAPSHOT'
-    compile group: 'com.spotify', name: 'docker-client', version: '8.11.7'
+/*
+ * Enable source and javadoc for Maven publish
+ */
 
-    testCompile group: 'com.natpryce', name: 'hamkrest', version: '1.5.0.0'
-    testCompile group: 'org.testcontainers', name: 'testcontainers', version: '1.8.3'
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
 }
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+artifacts {
+    archives sourcesJar
+    archives javadocJar
+}
+
+/*
+ * The Linter
+ */
+task ktlint(type: JavaExec, group: "verification") {
+    description = "Check Kotlin code style."
+    main = "com.github.shyiko.ktlint.Main"
+    classpath = configurations.ktlint
+    args "src/**/*.kt"
+    // to generate report in checkstyle format prepend following args:
+    // "--reporter=plain", "--reporter=checkstyle,output=${buildDir}/ktlint.xml"
+    // see https://github.com/shyiko/ktlint#usage for more
+}
+check.dependsOn ktlint
+
+task ktlintFormat(type: JavaExec, group: "formatting") {
+    description = "Fix Kotlin code style deviations."
+    main = "com.github.shyiko.ktlint.Main"
+    classpath = configurations.ktlint
+    args "-F", "src/**/*.kt"
+}
+
+
+

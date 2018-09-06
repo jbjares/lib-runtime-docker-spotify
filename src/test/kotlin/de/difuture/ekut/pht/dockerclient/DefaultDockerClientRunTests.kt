@@ -5,7 +5,6 @@ import de.difuture.ekut.pht.lib.runtime.docker.IDockerClient
 import org.junit.Before
 import org.junit.Test
 
-
 /**
  * Class that is particularly meant to test the run method of [DefaultDockerClient]
  *
@@ -16,7 +15,7 @@ import org.junit.Test
  */
 class DefaultDockerClientRunTests {
 
-    private lateinit var client : IDockerClient
+    private lateinit var client: IDockerClient
 
     @Before
     fun before() {
