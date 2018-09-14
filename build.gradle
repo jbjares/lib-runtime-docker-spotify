@@ -41,7 +41,7 @@ dependencies {
     ktlint "com.github.shyiko:ktlint:0.28.0"
 
     // The PHT Library
-    compile group: 'de.difuture.ekut.pht', name: 'lib', version: '0.0.1'
+    compile group: 'de.difuture.ekut.pht', name: 'lib', version: '0.0.2'
 
     // The standard lib
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.2.70"

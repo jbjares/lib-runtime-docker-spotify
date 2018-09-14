@@ -1,7 +1,7 @@
 package de.difuture.ekut.pht.dockerclient
 
-import de.difuture.ekut.pht.lib.common.docker.DockerRepositoryName
-import de.difuture.ekut.pht.lib.common.docker.DockerTag
+import jdregistry.client.data.DockerRepositoryName
+import jdregistry.client.data.DockerTag
 
-val LATEST_TAG = DockerTag("latest")
+val LATEST_TAG = DockerTag.LATEST
 val ALPINE_IMAGE = DockerRepositoryName("alpine")

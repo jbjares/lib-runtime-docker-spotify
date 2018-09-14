@@ -4,12 +4,12 @@ import com.spotify.docker.client.DefaultDockerClient
 import org.junit.Test
 import com.natpryce.hamkrest.assertion.assert
 import com.natpryce.hamkrest.isIn
-import de.difuture.ekut.pht.lib.runtime.docker.IDockerClient
+import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
 import org.junit.Before
 
 class DefaultDockerClientPullTests {
 
-    private lateinit var client: IDockerClient
+    private lateinit var client: DockerRuntimeClient
 
     @Before
     fun before() {
@@ -22,6 +22,8 @@ class DefaultDockerClientPullTests {
     @Test fun pull_alpine() {
 
         val imageId = this.client.pull(
+                "docker.io",
+                null,
                 ALPINE_IMAGE,
                 LATEST_TAG
         )

@@ -6,22 +6,22 @@ import com.spotify.docker.client.exceptions.DockerException
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.Container
 import com.spotify.docker.client.messages.ContainerConfig
-import de.difuture.ekut.pht.lib.common.docker.DockerContainerId
-import de.difuture.ekut.pht.lib.common.docker.DockerRepositoryName
-import de.difuture.ekut.pht.lib.common.docker.DockerTag
-import de.difuture.ekut.pht.lib.common.docker.DockerImageId
-import de.difuture.ekut.pht.lib.common.docker.DockerNetworkId
-import de.difuture.ekut.pht.lib.runtime.DockerClientException
-import de.difuture.ekut.pht.lib.runtime.NoSuchDockerContainerException
-import de.difuture.ekut.pht.lib.runtime.NoSuchDockerImageException
+import de.difuture.ekut.pht.lib.data.DockerContainerId
+import de.difuture.ekut.pht.lib.data.DockerImageId
+import de.difuture.ekut.pht.lib.data.DockerNetworkId
 import de.difuture.ekut.pht.lib.runtime.NoSuchDockerNetworkException
+import de.difuture.ekut.pht.lib.runtime.NoSuchDockerContainerException
+import de.difuture.ekut.pht.lib.runtime.DockerClientException
+import de.difuture.ekut.pht.lib.runtime.NoSuchDockerImageException
+import de.difuture.ekut.pht.lib.runtime.InterruptHandler
 import de.difuture.ekut.pht.lib.runtime.CreateDockerContainerFailedException
-import de.difuture.ekut.pht.lib.runtime.IDockerContainerInterruptHandler
 import de.difuture.ekut.pht.lib.runtime.docker.DockerContainerOutput
-import de.difuture.ekut.pht.lib.runtime.docker.IDockerClient
+import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
+import jdregistry.client.data.DockerRepositoryName
+import jdregistry.client.data.DockerTag
 
 /**
- * Spotify-client-based implementation of the [IDockerClient] interface.
+ * Spotify-client-based implementation of the [DockerClient] interface.
  *
  * This implementation entirely encapsulates completely the base Docker client related properties. For instance,
  * all Spotify related exceptions are converted to exceptions from the library
@@ -31,16 +31,19 @@ import de.difuture.ekut.pht.lib.runtime.docker.IDockerClient
  * @since 0.0.1
  *
  */
-class DefaultDockerClient(private val baseClient: DockerClient) : IDockerClient {
+class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeClient {
 
     private fun repoTagToImageId(repoTag: String): DockerImageId {
 
         // Now Figure out the Image ID of the recently pulled image
+        val allImages = baseClient.listImages()
+        println(repoTag)
         val images = baseClient.listImages().filter {
 
             val repoTags = it.repoTags()
             repoTags != null && repoTag in repoTags
         }
+        println(allImages)
         // Bad things have happened if this is not a Singleton
         return DockerImageId(images.single().id())
     }
@@ -61,9 +64,9 @@ class DefaultDockerClient(private val baseClient: DockerClient) : IDockerClient 
         try {
             val config = ContainerConfig.builder().build()
             this.baseClient.commitContainer(
-                    containerId.repr, targetRepo.repr, targetTag.repr, config, comment, author)
+                    containerId.repr, targetRepo.asString(), targetTag.repr, config, comment, author)
 
-            return this.repoTagToImageId(targetRepo.resolveTag(targetTag))
+            return this.repoTagToImageId(targetRepo.resolve(targetTag))
         } catch (ex: ContainerNotFoundException) {
 
             throw NoSuchDockerContainerException(ex)
@@ -84,11 +87,11 @@ class DefaultDockerClient(private val baseClient: DockerClient) : IDockerClient 
             throw DockerClientException(ex)
         }
 
-    override fun pull(repo: DockerRepositoryName, tag: DockerTag): DockerImageId {
+    override fun pull(host: String, port: Int?, repo: DockerRepositoryName, tag: DockerTag): DockerImageId {
 
         try {
             // The Spotify Docker Client only understands the ':' syntax for images and tags
-            val repoTag = repo.resolveTag(tag)
+            val repoTag = repo.resolve(host, port, tag)
 
             // First: Pull
             baseClient.pull(repoTag)
@@ -104,10 +107,10 @@ class DefaultDockerClient(private val baseClient: DockerClient) : IDockerClient 
         }
     }
 
-    override fun push(repo: DockerRepositoryName, tag: DockerTag) {
+    override fun push(host: String, port: Int?, repo: DockerRepositoryName, tag: DockerTag) {
 
         try {
-            baseClient.push(repo.resolveTag(tag))
+            baseClient.push(repo.resolve(host, port, tag))
         } catch (ex: ImageNotFoundException) {
 
             throw NoSuchDockerImageException(ex)
@@ -137,7 +140,7 @@ class DefaultDockerClient(private val baseClient: DockerClient) : IDockerClient 
         env: Map<String, String>?,
         networkId: DockerNetworkId?,
         warnings: MutableList<String>?,
-        interruptHandler: IDockerContainerInterruptHandler?
+        interruptHandler: InterruptHandler<DockerContainerId>?
     ): DockerContainerOutput {
 
         // Before we even try to create the Container, check whether the Docker Network actually exists
