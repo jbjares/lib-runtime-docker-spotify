@@ -47,7 +47,7 @@ dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.2.70"
 
     // The Spotify Docker Client
-    compile group: 'com.spotify', name: 'docker-client', version: '8.11.7'
+    compile group: 'com.spotify', name: 'docker-client', version: '8.13.0'
 
     // Testing
     testCompile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.6'

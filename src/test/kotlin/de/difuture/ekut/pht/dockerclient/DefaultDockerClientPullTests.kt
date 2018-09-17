@@ -5,6 +5,7 @@ import org.junit.Test
 import com.natpryce.hamkrest.assertion.assert
 import com.natpryce.hamkrest.isIn
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
+import jdregistry.client.data.DockerTag
 import org.junit.Before
 
 class DefaultDockerClientPullTests {
@@ -21,12 +22,7 @@ class DefaultDockerClientPullTests {
 
     @Test fun pull_alpine() {
 
-        val imageId = this.client.pull(
-                "docker.io",
-                null,
-                ALPINE_IMAGE,
-                LATEST_TAG
-        )
+        val imageId = this.client.pull(ALPINE_IMAGE, DockerTag.LATEST)
         assert.that(imageId, isIn(client.images()))
     }
 }

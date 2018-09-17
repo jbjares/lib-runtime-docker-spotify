@@ -33,24 +33,20 @@ import jdregistry.client.data.DockerTag
  */
 class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeClient {
 
+    override fun close() {
+
+        baseClient.close()
+    }
+
     private fun repoTagToImageId(repoTag: String): DockerImageId {
 
-        // Now Figure out the Image ID of the recently pulled image
-        val allImages = baseClient.listImages()
-        println(repoTag)
         val images = baseClient.listImages().filter {
 
             val repoTags = it.repoTags()
             repoTags != null && repoTag in repoTags
         }
-        println(allImages)
         // Bad things have happened if this is not a Singleton
         return DockerImageId(images.single().id())
-    }
-
-    override fun close() {
-
-        baseClient.close()
     }
 
     override fun commit(
@@ -87,11 +83,11 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
             throw DockerClientException(ex)
         }
 
-    override fun pull(host: String, port: Int?, repo: DockerRepositoryName, tag: DockerTag): DockerImageId {
+    override fun pull(repo: DockerRepositoryName, tag: DockerTag, host: String?): DockerImageId {
 
         try {
             // The Spotify Docker Client only understands the ':' syntax for images and tags
-            val repoTag = repo.resolve(host, port, tag)
+            val repoTag = repo.resolve(tag, host)
 
             // First: Pull
             baseClient.pull(repoTag)
@@ -107,15 +103,13 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
         }
     }
 
-    override fun push(host: String, port: Int?, repo: DockerRepositoryName, tag: DockerTag) {
+    override fun push(repo: DockerRepositoryName, tag: DockerTag, host: String?) {
 
         try {
-            baseClient.push(repo.resolve(host, port, tag))
+            baseClient.push(repo.resolve(tag, host))
         } catch (ex: ImageNotFoundException) {
-
             throw NoSuchDockerImageException(ex)
         } catch (ex: DockerException) {
-
             throw DockerClientException(ex)
         }
     }
@@ -125,10 +119,8 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
         try {
             baseClient.removeContainer(containerId.repr)
         } catch (ex: ContainerNotFoundException) {
-
             throw NoSuchDockerImageException(ex)
         } catch (ex: DockerException) {
-
             throw DockerClientException(ex)
         }
     }
@@ -224,7 +216,7 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
 
             return DockerContainerOutput(
                     containerIdObj,
-                    exit.statusCode(),
+                    exit.statusCode().toInt(),
                     stdout,
                     stderr)
         // Rethrow as NoSuchImageException
