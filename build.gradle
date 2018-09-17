@@ -60,14 +60,14 @@ apply plugin: 'maven-publish'
 apply plugin: 'org.jetbrains.dokka'
 
 group = "de.difuture.ekut.pht"
-version = "0.0.1"
+version = "0.0.2"
 
 
 publishing {
     publications {
         maven(MavenPublication) {
             from components.java
-            version '0.0.1'
+            version '0.0.2'
             pom.withXml {
                 asNode().dependencies.'*'.findAll() {
                     it.scope.text() == 'runtime' && project.configurations.compile.allDependencies.find { dep ->
@@ -83,7 +83,7 @@ publishing {
 
 model {
     tasks.generatePomFileForMavenPublication {
-        destination = file("$buildDir/libs/docker-client-implementation-0.0.1.pom")
+        destination = file("$buildDir/libs/docker-client-implementation-0.0.2.pom")
     }
 }
 
