@@ -1,4 +1,4 @@
-package de.difuture.ekut.pht.dockerclient
+package de.difuture.ekut.pht.lib.runtime.docker.spotify
 
 import com.spotify.docker.client.DefaultDockerClient
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
@@ -20,7 +20,7 @@ class DefaultDockerClientRunTests {
 
     @Before
     fun before() {
-        this.client = DefaultDockerClient(DefaultDockerClient.fromEnv().build())
+        this.client = SpotifyDockerClient()
     }
 
     @Test

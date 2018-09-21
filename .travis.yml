@@ -1,9 +1,10 @@
 sudo: required
-
 language: java
-
 services:
   - docker
-
 before_install:
-  - gradle clean
+  - ./gradlew clean
+before_deploy:
+- ./gradlew generatePomFileForMavenPublication
+after_success:
+- bash <(curl -s https://codecov.io/bash)

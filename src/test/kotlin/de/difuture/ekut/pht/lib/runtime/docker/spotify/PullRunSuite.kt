@@ -1,4 +1,4 @@
-package de.difuture.ekut.pht.dockerclient
+package de.difuture.ekut.pht.lib.runtime.docker.spotify
 
 import org.junit.runners.Suite
 import org.junit.runner.RunWith
