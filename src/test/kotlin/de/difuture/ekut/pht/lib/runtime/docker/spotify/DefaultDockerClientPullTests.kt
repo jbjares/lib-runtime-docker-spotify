@@ -1,12 +1,10 @@
-package de.difuture.ekut.pht.dockerclient
+package de.difuture.ekut.pht.lib.runtime.docker.spotify
 
-import com.spotify.docker.client.DefaultDockerClient
-import org.junit.Test
-import com.natpryce.hamkrest.assertion.assert
-import com.natpryce.hamkrest.isIn
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
 import jdregistry.client.data.DockerTag
+import org.junit.Assert
 import org.junit.Before
+import org.junit.Test
 
 class DefaultDockerClientPullTests {
 
@@ -15,14 +13,16 @@ class DefaultDockerClientPullTests {
     @Before
     fun before() {
 
-        this.client = DefaultDockerClient(DefaultDockerClient.fromEnv().build())
+        this.client = SpotifyDockerClient()
     }
 
     // Tests pull several image and ensure that the image id can be listed
 
-    @Test fun pull_alpine() {
+    @Test
+    fun pull_alpine() {
 
         val imageId = this.client.pull(ALPINE_IMAGE, DockerTag.LATEST)
-        assert.that(imageId, isIn(client.images()))
+
+        Assert.assertTrue(imageId in client.images())
     }
 }
