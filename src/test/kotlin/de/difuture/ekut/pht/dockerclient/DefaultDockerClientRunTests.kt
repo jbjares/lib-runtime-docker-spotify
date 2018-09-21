@@ -20,7 +20,7 @@ class DefaultDockerClientRunTests {
 
     @Before
     fun before() {
-        this.client = DefaultDockerClient(DefaultDockerClient.fromEnv().build())
+        this.client = SpotifyDockerClient()
     }
 
     @Test

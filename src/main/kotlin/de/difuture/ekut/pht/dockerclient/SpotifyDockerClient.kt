@@ -1,24 +1,27 @@
 package de.difuture.ekut.pht.dockerclient
 
+import com.spotify.docker.client.DefaultDockerClient
 import com.spotify.docker.client.DockerClient
 import com.spotify.docker.client.exceptions.ContainerNotFoundException
 import com.spotify.docker.client.exceptions.DockerException
 import com.spotify.docker.client.exceptions.ImageNotFoundException
-import com.spotify.docker.client.messages.Container
 import com.spotify.docker.client.messages.ContainerConfig
+import com.spotify.docker.client.messages.RegistryAuth
 import de.difuture.ekut.pht.lib.data.DockerContainerId
+import de.difuture.ekut.pht.lib.data.DockerContainerOutput
 import de.difuture.ekut.pht.lib.data.DockerImageId
 import de.difuture.ekut.pht.lib.data.DockerNetworkId
-import de.difuture.ekut.pht.lib.runtime.NoSuchDockerNetworkException
-import de.difuture.ekut.pht.lib.runtime.NoSuchDockerContainerException
-import de.difuture.ekut.pht.lib.runtime.DockerClientException
-import de.difuture.ekut.pht.lib.runtime.NoSuchDockerImageException
-import de.difuture.ekut.pht.lib.runtime.InterruptHandler
-import de.difuture.ekut.pht.lib.runtime.CreateDockerContainerFailedException
-import de.difuture.ekut.pht.lib.runtime.docker.DockerContainerOutput
+import de.difuture.ekut.pht.lib.runtime.docker.CreateDockerContainerFailedException
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
+import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClientException
+import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerContainerException
+import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerImageException
+import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerNetworkException
+import de.difuture.ekut.pht.lib.runtime.interrupt.InterruptHandler
+import de.difuture.ekut.pht.lib.runtime.interrupt.InterruptSignaler
 import jdregistry.client.data.DockerRepositoryName
 import jdregistry.client.data.DockerTag
+import java.lang.IllegalStateException
 
 /**
  * Spotify-client-based implementation of the [DockerClient] interface.
@@ -31,13 +34,18 @@ import jdregistry.client.data.DockerTag
  * @since 0.0.1
  *
  */
-class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeClient {
+class SpotifyDockerClient : DockerRuntimeClient {
 
-    override fun close() {
-
-        baseClient.close()
+    private companion object {
+        const val SEP = "/"
+        const val EXIT_STATUS = "exited"
     }
 
+    private val baseClient = DefaultDockerClient.fromEnv().build()
+
+    /**
+     * Translates the repoTag string to the corresponding unique Image ID
+     */
     private fun repoTagToImageId(repoTag: String): DockerImageId {
 
         val images = baseClient.listImages().filter {
@@ -45,72 +53,84 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
             val repoTags = it.repoTags()
             repoTags != null && repoTag in repoTags
         }
-        // Bad things have happened if this is not a Singleton
-        return DockerImageId(images.single().id())
+        return when (images.size) {
+
+            0 -> throw IllegalStateException("Implementation Error! No Image with repoTag '$repoTag' was found!")
+            1 -> DockerImageId(images.single().id())
+            else -> throw IllegalStateException("Implementation Error! Multiple images with repoTag '$repoTag' found")
+        }
+    }
+
+    override fun close() {
+
+        this.baseClient.close()
     }
 
     override fun commit(
         containerId: DockerContainerId,
         targetRepo: DockerRepositoryName,
         targetTag: DockerTag,
+        targetHost: String?,
         author: String?,
         comment: String?
     ): DockerImageId {
 
         try {
             val config = ContainerConfig.builder().build()
+            // Handle trailing slashes for hostnames
+            val hostString = targetHost?.let { if (it.endsWith(SEP)) it else "$it$SEP" } ?: ""
             this.baseClient.commitContainer(
-                    containerId.repr, targetRepo.asString(), targetTag.repr, config, comment, author)
+                    containerId.repr,
+                    "$hostString${targetRepo.asString()}",
+                    targetTag.repr,
+                    config,
+                    comment,
+                    author)
 
-            return this.repoTagToImageId(targetRepo.resolve(targetTag))
+            return this.repoTagToImageId(targetRepo.resolve(targetTag, targetHost))
         } catch (ex: ContainerNotFoundException) {
-
-            throw NoSuchDockerContainerException(ex)
+            throw NoSuchDockerContainerException(ex, containerId)
         } catch (ex: DockerException) {
-
-            throw DockerClientException(ex)
+            throw DockerRuntimeClientException(ex)
         }
     }
 
-    override fun images(): List<DockerImageId> =
+    override fun images() =
 
-        try {
-            baseClient.listImages().map { DockerImageId(it.id()) }
+            try {
+                baseClient.listImages().map { DockerImageId(it.id()) }
 
-        // rethrow DockerException, such that no Spotify Exception leaves this class
-        } catch (ex: DockerException) {
-
-            throw DockerClientException(ex)
-        }
+                // rethrow DockerException, such that no Spotify Exception leaves this class
+            } catch (ex: DockerException) {
+                throw DockerRuntimeClientException(ex)
+            }
 
     override fun pull(repo: DockerRepositoryName, tag: DockerTag, host: String?): DockerImageId {
 
+        // The Spotify Docker Client only understands the ':' syntax for images and tags
+        val repoTag = repo.resolve(tag, host)
+
         try {
-            // The Spotify Docker Client only understands the ':' syntax for images and tags
-            val repoTag = repo.resolve(tag, host)
-
             // First: Pull
-            baseClient.pull(repoTag)
-
+            this.baseClient.pull(repoTag)
             // Now return the image ID of this image
             return this.repoTagToImageId(repoTag)
         } catch (ex: ImageNotFoundException) {
-
-            throw NoSuchDockerImageException(ex)
+            throw NoSuchDockerImageException(ex, repo = repoTag)
         } catch (ex: DockerException) {
-
-            throw DockerClientException(ex)
+            throw DockerRuntimeClientException(ex)
         }
     }
 
     override fun push(repo: DockerRepositoryName, tag: DockerTag, host: String?) {
 
+        val repoTag = repo.resolve(tag, host)
         try {
-            baseClient.push(repo.resolve(tag, host))
+            baseClient.push(repoTag)
         } catch (ex: ImageNotFoundException) {
-            throw NoSuchDockerImageException(ex)
+            throw NoSuchDockerImageException(ex, repoTag)
         } catch (ex: DockerException) {
-            throw DockerClientException(ex)
+            throw DockerRuntimeClientException(ex)
         }
     }
 
@@ -119,10 +139,17 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
         try {
             baseClient.removeContainer(containerId.repr)
         } catch (ex: ContainerNotFoundException) {
-            throw NoSuchDockerImageException(ex)
+            throw NoSuchDockerContainerException(ex, containerId)
         } catch (ex: DockerException) {
-            throw DockerClientException(ex)
+            throw DockerRuntimeClientException(ex)
         }
+    }
+
+    override fun login(username: String, password: String, host: String?): Boolean {
+
+        val builder = RegistryAuth.builder().username(username).password(password)
+        val auth = host?.let { builder.serverAddress(it) } ?: builder
+        return this.baseClient.auth(auth.build()) == 200
     }
 
     override fun run(
@@ -132,20 +159,24 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
         env: Map<String, String>?,
         networkId: DockerNetworkId?,
         warnings: MutableList<String>?,
+        interruptSignaler: InterruptSignaler<DockerContainerId>?,
         interruptHandler: InterruptHandler<DockerContainerId>?
     ): DockerContainerOutput {
 
         // Before we even try to create the Container, check whether the Docker Network actually exists
         try {
-            if (networkId != null && networkId.repr !in baseClient.listNetworks().map { it.id() }) {
 
-                throw NoSuchDockerNetworkException("Docker Network with ID ${networkId.repr} does not exist!")
+            val networks = baseClient.listNetworks().map { it.id() }
+            if (networkId != null && networkId.repr !in networks) {
+
+                throw NoSuchDockerNetworkException(
+                        "Docker Network with ID ${networkId.repr} does not exist!",
+                        networkId)
             }
 
-        // Rethrow as Docker Client exception from library
+            // Rethrow as Docker Client exception from library
         } catch (ex: DockerException) {
-
-            throw DockerClientException(ex)
+            throw DockerRuntimeClientException(ex)
         }
 
         //  Map the environment map to the list format required by the Spotify Docker Client
@@ -171,8 +202,8 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
             }
 
             // Fetch the Container ID
-            val containerId = creation.id()?.let { it }
-                ?: throw CreateDockerContainerFailedException("Spotify Docker Client did not make the Docker Container ID available!")
+            val containerId = creation.id()
+                    ?: throw CreateDockerContainerFailedException("Spotify Docker Client did not make the Docker Container ID available!")
 
             // We also need to container ID as proper object
             val containerIdObj = DockerContainerId(containerId)
@@ -187,16 +218,16 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
             baseClient.startContainer(containerId)
 
             // The Interrupt needs to be handled after the container has been started
-            if (interruptHandler != null) {
+            if (interruptSignaler != null && interruptHandler != null) {
 
                 // Find the container that we have just started (we cannot use the baseClient waitContainer method,
                 // as this does not allow the handling of timeouts
                 // I use collection operations here, because I do not understand how the parameter of listContainers works
-                val container: Container = baseClient.listContainers().first { it.id() == containerId }
+                val container = baseClient.listContainers().first { it.id() == containerId }
 
                 while (container.status() != EXIT_STATUS) {
 
-                    if (interruptHandler.wasInterrupted(containerIdObj)) {
+                    if (interruptSignaler.wasInterrupted(containerIdObj)) {
 
                         interruptHandler.handleInterrupt(containerIdObj)
                     }
@@ -219,21 +250,13 @@ class DefaultDockerClient(private val baseClient: DockerClient) : DockerRuntimeC
                     exit.statusCode().toInt(),
                     stdout,
                     stderr)
-        // Rethrow as NoSuchImageException
+            // Rethrow as NoSuchImageException
         } catch (ex: ImageNotFoundException) {
-
-            throw NoSuchDockerImageException(ex)
+            throw NoSuchDockerImageException(ex, imageId)
         } catch (ex: ContainerNotFoundException) {
-
-            throw NoSuchDockerContainerException("Apparently the created container was deleted before it could be started or be removed by this method")
+            throw DockerRuntimeClientException(ex)
         } catch (ex: DockerException) {
-
-            throw DockerClientException(ex)
+            throw DockerRuntimeClientException(ex)
         }
-    }
-
-    companion object {
-
-        private const val EXIT_STATUS = "exited"
     }
 }
