@@ -58,7 +58,7 @@ dependencies {
 apply plugin: 'maven-publish'
 apply plugin: 'org.jetbrains.dokka'
 
-group = "de.difuture.ekut.pht"
+group = "de.difuture.ekut.pht.lib"
 version = "0.0.4"
 
 
