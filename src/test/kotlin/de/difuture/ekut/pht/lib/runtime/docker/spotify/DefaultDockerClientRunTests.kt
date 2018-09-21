@@ -1,4 +1,4 @@
-package de.difuture.ekut.pht.dockerclient
+package de.difuture.ekut.pht.lib.runtime.docker.spotify
 
 import com.spotify.docker.client.DefaultDockerClient
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
