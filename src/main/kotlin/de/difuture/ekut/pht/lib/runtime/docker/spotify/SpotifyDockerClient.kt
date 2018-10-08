@@ -10,15 +10,16 @@ import com.spotify.docker.client.messages.RegistryAuth
 import de.difuture.ekut.pht.lib.data.DockerContainerId
 import de.difuture.ekut.pht.lib.data.DockerContainerOutput
 import de.difuture.ekut.pht.lib.data.DockerImageId
-import de.difuture.ekut.pht.lib.data.DockerNetworkId
+import de.difuture.ekut.pht.lib.data.asKeyValueList
+import de.difuture.ekut.pht.lib.data.ensureTrailingSlash
 import de.difuture.ekut.pht.lib.runtime.docker.CreateDockerContainerFailedException
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClientException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerContainerException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerImageException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerNetworkException
-import de.difuture.ekut.pht.lib.runtime.interrupt.InterruptHandler
-import de.difuture.ekut.pht.lib.runtime.interrupt.InterruptSignaler
+import de.difuture.ekut.pht.lib.runtime.docker.params.DockerCommitOptionalParameters
+import de.difuture.ekut.pht.lib.runtime.docker.params.DockerRunOptionalParameters
 import jdregistry.client.data.DockerRepositoryName
 import jdregistry.client.data.DockerTag
 import java.lang.IllegalStateException
@@ -37,7 +38,6 @@ import java.lang.IllegalStateException
 class SpotifyDockerClient : DockerRuntimeClient {
 
     private companion object {
-        const val SEP = "/"
         const val EXIT_STATUS = "exited"
     }
 
@@ -70,24 +70,21 @@ class SpotifyDockerClient : DockerRuntimeClient {
         containerId: DockerContainerId,
         targetRepo: DockerRepositoryName,
         targetTag: DockerTag,
-        targetHost: String?,
-        author: String?,
-        comment: String?
+        optionalParams: DockerCommitOptionalParameters?
     ): DockerImageId {
 
         try {
-            val config = ContainerConfig.builder().build()
             // Handle trailing slashes for hostnames
-            val hostString = targetHost?.let { if (it.endsWith(SEP)) it else "$it$SEP" } ?: ""
+            val hostString = optionalParams?.targetHost?.ensureTrailingSlash().orEmpty()
             this.baseClient.commitContainer(
                     containerId.repr,
                     "$hostString${targetRepo.asString()}",
                     targetTag.repr,
-                    config,
-                    comment,
-                    author)
+                    ContainerConfig.builder().build(),
+                    optionalParams?.comment,
+                    optionalParams?.author)
 
-            return this.repoTagToImageId(targetRepo.resolve(targetTag, targetHost))
+            return this.repoTagToImageId(targetRepo.resolve(targetTag, optionalParams?.targetHost))
         } catch (ex: ContainerNotFoundException) {
             throw NoSuchDockerContainerException(ex, containerId)
         } catch (ex: DockerException) {
@@ -156,14 +153,11 @@ class SpotifyDockerClient : DockerRuntimeClient {
         imageId: DockerImageId,
         commands: List<String>,
         rm: Boolean,
-        env: Map<String, String>?,
-        networkId: DockerNetworkId?,
-        warnings: MutableList<String>?,
-        interruptSignaler: InterruptSignaler<DockerContainerId>?,
-        interruptHandler: InterruptHandler<DockerContainerId>?
+        optionalParams: DockerRunOptionalParameters?
     ): DockerContainerOutput {
 
         // Before we even try to create the Container, check whether the Docker Network actually exists
+        val networkId = optionalParams?.networkId
         try {
 
             val networks = baseClient.listNetworks().map { it.id() }
@@ -180,7 +174,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
         }
 
         //  Map the environment map to the list format required by the Spotify Docker Client
-        val envList = env?.map { (key, value) -> "${key.trim()}=${value.trim()}" } ?: emptyList()
+        val envList = optionalParams?.env?.asKeyValueList() ?: emptyList()
 
         // Configuration for the Container Creation, currently only takes the Image Id
         val config = ContainerConfig.builder()
@@ -190,16 +184,13 @@ class SpotifyDockerClient : DockerRuntimeClient {
                 .build()
 
         try {
+            val warnings = mutableListOf<String>()
             // We rethrow ImageNotFound and DockerClient exceptions, but let Interrupted Exceptions pass throw
             // TODO Platform type. Can this be null? This would not be documented by the method
             val creation = baseClient.createContainer(config)
 
             // Collect warnings to warnings list if present and if we are interested in warnings
-            val creationWarnings = creation.warnings()
-            if (creationWarnings != null && warnings != null) {
-
-                warnings.addAll(creationWarnings)
-            }
+            creation.warnings()?.let { warnings.addAll(it) }
 
             // Fetch the Container ID
             val containerId = creation.id()
@@ -218,6 +209,9 @@ class SpotifyDockerClient : DockerRuntimeClient {
             baseClient.startContainer(containerId)
 
             // The Interrupt needs to be handled after the container has been started
+            val interruptSignaler = optionalParams?.interruptSignaler
+            val interruptHandler = optionalParams?.interruptHandler
+
             if (interruptSignaler != null && interruptHandler != null) {
 
                 // Find the container that we have just started (we cannot use the baseClient waitContainer method,
@@ -236,6 +230,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
             // Now fetch the container exit
             val exit = baseClient.waitContainer(containerId)
 
+            // Stdout and Stderr need to be read before the container is gonna be removed
             val stdout = baseClient.logs(containerId, DockerClient.LogsParam.stdout()).readFully()
             val stderr = baseClient.logs(containerId, DockerClient.LogsParam.stderr()).readFully()
 
@@ -249,7 +244,8 @@ class SpotifyDockerClient : DockerRuntimeClient {
                     containerIdObj,
                     exit.statusCode().toInt(),
                     stdout,
-                    stderr)
+                    stderr,
+                    warnings)
             // Rethrow as NoSuchImageException
         } catch (ex: ImageNotFoundException) {
             throw NoSuchDockerImageException(ex, imageId)
