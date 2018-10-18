@@ -50,7 +50,7 @@ dependencies {
     compile group: 'de.difuture.ekut.pht.lib', name: 'runtime', version: '0.0.6'
 
     // The Spotify Docker Client
-    compile group: 'com.spotify', name: 'docker-client', version: '8.14.0'
+    compile group: 'com.spotify', name: 'docker-client', version: '8.14.1'
 
     testCompile group: 'junit', name: 'junit', version: '4.12'
 }
@@ -59,7 +59,7 @@ apply plugin: 'maven-publish'
 apply plugin: 'org.jetbrains.dokka'
 
 group = "de.difuture.ekut.pht.lib"
-version = "0.0.5"
+version = "0.0.6"
 
 
 publishing {
@@ -81,7 +81,7 @@ publishing {
 
 model {
     tasks.generatePomFileForMavenPublication {
-        destination = file("$buildDir/libs/runtime-docker-spotify-0.0.5.pom")
+        destination = file("$buildDir/libs/runtime-docker-spotify-0.0.6.pom")
     }
 }
 

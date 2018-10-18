@@ -6,7 +6,7 @@ import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
 
-class DefaultDockerClientPullTests {
+class SpotifyDockerClientPullTests {
 
     private lateinit var client: DockerRuntimeClient
 

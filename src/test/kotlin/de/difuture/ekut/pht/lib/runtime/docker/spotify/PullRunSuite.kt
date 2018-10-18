@@ -13,6 +13,6 @@ import org.junit.runners.Suite.SuiteClasses
  * @
  *
  */
-@SuiteClasses(DefaultDockerClientPullTests::class, DefaultDockerClientRunTests::class)
+@SuiteClasses(SpotifyDockerClientPullTests::class, SpotifyDockerClientRunTests::class)
 @RunWith(Suite::class)
 class PullRunSuite
