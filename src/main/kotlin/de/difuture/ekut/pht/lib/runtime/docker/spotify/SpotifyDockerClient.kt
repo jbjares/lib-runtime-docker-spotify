@@ -256,16 +256,17 @@ class SpotifyDockerClient : DockerRuntimeClient {
         }
     }
 
-    override fun ps(allowedStatus: Set<String>) =
-            try {
-                baseClient.listContainers()
-                        .asSequence()
-                        .filter { it.id() in allowedStatus }
-                        .map { DockerContainerId(it.id()) }
-                        .toList()
+    override fun tag(
+        sourceRepo: DockerRepositoryName,
+        sourceTag: DockerTag,
+        targetRepo: DockerRepositoryName,
+        targetTag: DockerTag
+    ) {
 
-                // rethrow DockerException, such that no Spotify Exception leaves this class
-            } catch (ex: DockerException) {
-                throw DockerRuntimeClientException(ex)
-            }
+        try {
+            this.baseClient.tag(sourceRepo.resolve(sourceTag), targetRepo.resolve(targetTag))
+        } catch (ex: DockerException) {
+            throw DockerRuntimeClientException(ex)
+        }
+    }
 }
