@@ -257,14 +257,12 @@ class SpotifyDockerClient : DockerRuntimeClient {
     }
 
     override fun tag(
-        sourceRepo: DockerRepositoryName,
-        sourceTag: DockerTag,
+        imageId: DockerImageId,
         targetRepo: DockerRepositoryName,
         targetTag: DockerTag
     ) {
-
         try {
-            this.baseClient.tag(sourceRepo.resolve(sourceTag), targetRepo.resolve(targetTag))
+            this.baseClient.tag(imageId.repr, targetRepo.resolve(targetTag))
         } catch (ex: DockerException) {
             throw DockerRuntimeClientException(ex)
         }
