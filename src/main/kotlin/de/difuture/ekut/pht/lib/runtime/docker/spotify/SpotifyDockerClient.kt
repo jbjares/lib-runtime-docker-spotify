@@ -255,4 +255,17 @@ class SpotifyDockerClient : DockerRuntimeClient {
             throw DockerRuntimeClientException(ex)
         }
     }
+
+    override fun ps(allowedStatus: Set<String>) =
+            try {
+                baseClient.listContainers()
+                        .asSequence()
+                        .filter { it.id() in allowedStatus }
+                        .map { DockerContainerId(it.id()) }
+                        .toList()
+
+                // rethrow DockerException, such that no Spotify Exception leaves this class
+            } catch (ex: DockerException) {
+                throw DockerRuntimeClientException(ex)
+            }
 }
