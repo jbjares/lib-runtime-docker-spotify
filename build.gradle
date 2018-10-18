@@ -47,7 +47,7 @@ dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.2.71"
 
     // The PHT Runtime Library
-    compile group: 'de.difuture.ekut.pht.lib', name: 'runtime', version: '0.1.0'
+    compile group: 'de.difuture.ekut.pht.lib', name: 'runtime', version: '0.1.1'
 
     // The Spotify Docker Client
     compile group: 'com.spotify', name: 'docker-client', version: '8.14.1'
