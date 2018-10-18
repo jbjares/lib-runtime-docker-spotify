@@ -14,7 +14,7 @@ import org.junit.Test
  * @since 0.0.1
  *
  */
-class DefaultDockerClientRunTests {
+class SpotifyDockerClientRunTests {
 
     private lateinit var client: DockerRuntimeClient
 
