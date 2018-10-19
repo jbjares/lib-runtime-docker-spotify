@@ -11,7 +11,6 @@ import de.difuture.ekut.pht.lib.data.DockerContainerId
 import de.difuture.ekut.pht.lib.data.DockerContainerOutput
 import de.difuture.ekut.pht.lib.data.DockerImageId
 import de.difuture.ekut.pht.lib.data.asKeyValueList
-import de.difuture.ekut.pht.lib.data.ensureTrailingSlash
 import de.difuture.ekut.pht.lib.runtime.docker.CreateDockerContainerFailedException
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClientException
@@ -73,18 +72,27 @@ class SpotifyDockerClient : DockerRuntimeClient {
         optionalParams: DockerCommitOptionalParameters?
     ): DockerImageId {
 
+        // IMPORTANT: We cannot use the Docker commit API endpoint to implement
+        // commit, since the number of rootfs layers in Docker is limited to 42.
+        // As the --squash functionality for docker build is experimental as of 2018-10-19,
+        // this functionality should be implemented via consecutive docker export, docker import
+        // command. The appropriate commit command is below:
+        // this.baseClient.commitContainer(
+        //                    containerId.repr,
+        //                    "$hostString${targetRepo.asString()}",
+        //                    targetTag.repr,
+        //                    ContainerConfig.builder().build(),
+        //                    optionalParams?.comment,
+        //                    optionalParams?.author)
         try {
-            // Handle trailing slashes for hostnames
-            val hostString = optionalParams?.targetHost?.ensureTrailingSlash().orEmpty()
-            this.baseClient.commitContainer(
-                    containerId.repr,
-                    "$hostString${targetRepo.asString()}",
-                    targetTag.repr,
-                    ContainerConfig.builder().build(),
-                    optionalParams?.comment,
-                    optionalParams?.author)
+            val resolved = targetRepo.resolve(targetTag, optionalParams?.targetHost)
 
-            return this.repoTagToImageId(targetRepo.resolve(targetTag, optionalParams?.targetHost))
+            // First, export the container to a tar archive, then immediately create an image from it
+            this.baseClient.exportContainer(containerId.repr).use { inputStream ->
+
+                this.baseClient.create(resolved, inputStream)
+            }
+            return this.repoTagToImageId(resolved)
         } catch (ex: ContainerNotFoundException) {
             throw NoSuchDockerContainerException(ex, containerId)
         } catch (ex: DockerException) {
