@@ -88,12 +88,14 @@ class SpotifyDockerClient : DockerRuntimeClient {
         }
 
         // 2. Copy all the files from the source container into the target container
-        for (file in exportFiles) {
+        for (path in exportFiles) {
 
-            val absolutePath = file.toFile().absolutePath
+            val file = path.toFile()
+            val absolutePath = file.absolutePath
+
             this.baseClient.archiveContainer(containerId.repr, absolutePath).use { inputStream ->
 
-                this.baseClient.copyToContainer(inputStream, targetContainerId, absolutePath)
+                this.baseClient.copyToContainer(inputStream, targetContainerId, file.parentFile.absolutePath)
             }
         }
 
