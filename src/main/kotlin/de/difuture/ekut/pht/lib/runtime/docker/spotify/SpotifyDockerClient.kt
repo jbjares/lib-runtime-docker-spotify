@@ -14,7 +14,6 @@ import de.difuture.ekut.pht.lib.data.asKeyValueList
 import de.difuture.ekut.pht.lib.runtime.docker.CreateDockerContainerFailedException
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClientException
-import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerContainerException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerImageException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerNetworkException
 import de.difuture.ekut.pht.lib.runtime.docker.params.DockerCommitOptionalParameters
@@ -22,6 +21,7 @@ import de.difuture.ekut.pht.lib.runtime.docker.params.DockerRunOptionalParameter
 import jdregistry.client.data.DockerRepositoryName
 import jdregistry.client.data.DockerTag
 import java.lang.IllegalStateException
+import java.nio.file.Path
 
 /**
  * Spotify-client-based implementation of the [DockerClient] interface.
@@ -65,39 +65,47 @@ class SpotifyDockerClient : DockerRuntimeClient {
         this.baseClient.close()
     }
 
-    override fun commit(
+    override fun commitByRebase(
         containerId: DockerContainerId,
+        exportFiles: List<Path>,
+        from: String,
         targetRepo: DockerRepositoryName,
         targetTag: DockerTag,
         optionalParams: DockerCommitOptionalParameters?
     ): DockerImageId {
 
-        // IMPORTANT: We cannot use the Docker commit API endpoint to implement
-        // commit, since the number of rootfs layers in Docker is limited to 42.
-        // As the --squash functionality for docker build is experimental as of 2018-10-19,
-        // this functionality should be implemented via consecutive docker export, docker import
-        // command. The appropriate commit command is below:
-        // this.baseClient.commitContainer(
-        //                    containerId.repr,
-        //                    "$hostString${targetRepo.asString()}",
-        //                    targetTag.repr,
-        //                    ContainerConfig.builder().build(),
-        //                    optionalParams?.comment,
-        //                    optionalParams?.author)
-        try {
-            val resolved = targetRepo.resolve(targetTag, optionalParams?.targetHost)
+        // Guard: check that all paths in the input are absolute
+        exportFiles.forEach { if (!it.isAbsolute) throw IllegalArgumentException("File $it is not absolute") }
 
-            // First, export the container to a tar archive, then immediately create an image from it
-            this.baseClient.exportContainer(containerId.repr).use { inputStream ->
+        // 1. First, create a new container from the baseImage in which the files should be copied into
+        val targetContainerId = try {
 
-                this.baseClient.create(resolved, inputStream)
-            }
-            return this.repoTagToImageId(resolved)
-        } catch (ex: ContainerNotFoundException) {
-            throw NoSuchDockerContainerException(ex, containerId)
+            val config = ContainerConfig.builder().image(from).build()
+            this.baseClient.createContainer(config).id()
+                ?: throw DockerRuntimeClientException("Creation of Docker Container failed!")
         } catch (ex: DockerException) {
             throw DockerRuntimeClientException(ex)
         }
+
+        // 2. Copy all the files from the source container into the target container
+        for (file in exportFiles) {
+
+            val absolutePath = file.toFile().absolutePath
+            this.baseClient.archiveContainer(containerId.repr, absolutePath).use { inputStream ->
+
+                this.baseClient.copyToContainer(inputStream, targetContainerId, absolutePath)
+            }
+        }
+
+        // 3. Create the new image from the container
+        this.baseClient.commitContainer(
+                    containerId.repr,
+                    targetRepo.asString(),
+                            targetTag.repr,
+                            ContainerConfig.builder().build(),
+                            optionalParams?.comment,
+                            optionalParams?.author)
+        return this.repoTagToImageId(targetRepo.resolve(targetTag))
     }
 
     override fun images() =
@@ -134,17 +142,6 @@ class SpotifyDockerClient : DockerRuntimeClient {
             baseClient.push(repoTag)
         } catch (ex: ImageNotFoundException) {
             throw NoSuchDockerImageException(ex, repoTag)
-        } catch (ex: DockerException) {
-            throw DockerRuntimeClientException(ex)
-        }
-    }
-
-    override fun rm(containerId: DockerContainerId) {
-
-        try {
-            baseClient.removeContainer(containerId.repr)
-        } catch (ex: ContainerNotFoundException) {
-            throw NoSuchDockerContainerException(ex, containerId)
         } catch (ex: DockerException) {
             throw DockerRuntimeClientException(ex)
         }
