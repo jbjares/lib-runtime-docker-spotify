@@ -15,7 +15,6 @@ import de.difuture.ekut.pht.lib.runtime.docker.CreateDockerContainerFailedExcept
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClientException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerImageException
-import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerNetworkException
 import de.difuture.ekut.pht.lib.runtime.docker.params.DockerCommitOptionalParameters
 import de.difuture.ekut.pht.lib.runtime.docker.params.DockerRunOptionalParameters
 import jdregistry.client.data.RepositoryName as DockerRepositoryName
@@ -168,25 +167,8 @@ class SpotifyDockerClient : DockerRuntimeClient {
         optionalParams: DockerRunOptionalParameters?
     ): DockerContainerOutput = unlessClosed {
 
-        // Before we even try to create the Container, check whether the Docker Network actually exists
-        val networkId = optionalParams?.networkId
-        try {
-
-            val networks = baseClient.listNetworks().map { it.id() }
-            if (networkId != null && networkId.repr !in networks) {
-
-                throw NoSuchDockerNetworkException(
-                        "Docker Network with ID ${networkId.repr} does not exist!",
-                        networkId)
-            }
-
-            // Rethrow as Docker Client exception from library
-        } catch (ex: DockerException) {
-            throw DockerRuntimeClientException(ex)
-        }
-
         //  Map the environment map to the list format required by the Spotify Docker Client
-        val envList = optionalParams?.env?.asKeyValueList() ?: emptyList()
+        val envList = optionalParams?.env?.asKeyValueList().orEmpty()
 
         // Configuration for the Container Creation, currently only takes the Image Id
         val config = ContainerConfig.builder()
@@ -212,6 +194,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
             val containerIdObj = DockerContainerId(containerId)
 
             // Attach the container to a network, if this is requested
+            val networkId = optionalParams?.networkId
             if (networkId != null) {
 
                 baseClient.connectToNetwork(containerId, networkId.repr)
@@ -266,6 +249,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
         } catch (ex: DockerException) {
             throw DockerRuntimeClientException(ex)
         }
+        // TODO Cleanup
     }
 
     override fun tag(
