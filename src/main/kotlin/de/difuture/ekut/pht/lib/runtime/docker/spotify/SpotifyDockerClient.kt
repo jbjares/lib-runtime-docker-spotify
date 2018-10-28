@@ -36,9 +36,7 @@ import java.nio.file.Path
 class SpotifyDockerClient : DockerRuntimeClient {
 
     private val baseClient = DefaultDockerClient.fromEnv().build()
-
     private var closed = false
-
     private var auth: RegistryAuth? = null
 
     /**
@@ -116,6 +114,9 @@ class SpotifyDockerClient : DockerRuntimeClient {
         // 4 Remove the created container
         baseClient.stopContainer(targetContainerId, 20)
         baseClient.removeContainer(targetContainerId)
+
+        // 5 Also remove the source Container
+        baseClient.removeContainer(containerId.repr)
 
         this.repoTagToImageId(targetRepo.resolve(targetTag))
     }
