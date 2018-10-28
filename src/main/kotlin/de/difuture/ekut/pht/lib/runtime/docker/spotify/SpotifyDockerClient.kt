@@ -194,10 +194,10 @@ class SpotifyDockerClient : DockerRuntimeClient {
             val containerIdObj = DockerContainerId(containerId)
 
             // Attach the container to a network, if this is requested
-            val networkId = optionalParams?.networkId
-            if (networkId != null) {
+            val network = optionalParams?.network
+            if (network != null) {
 
-                baseClient.connectToNetwork(containerId, networkId.repr)
+                baseClient.connectToNetwork(containerId, network)
             }
 
             // Now start the container
