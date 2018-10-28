@@ -112,6 +112,11 @@ class SpotifyDockerClient : DockerRuntimeClient {
                             ContainerConfig.builder().build(),
                             optionalParams?.comment,
                             optionalParams?.author)
+
+        // 4 Remove the created container
+        baseClient.stopContainer(targetContainerId, 20)
+        baseClient.removeContainer(targetContainerId)
+
         this.repoTagToImageId(targetRepo.resolve(targetTag))
     }
 

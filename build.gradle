@@ -59,7 +59,7 @@ apply plugin: 'maven-publish'
 apply plugin: 'org.jetbrains.dokka'
 
 group = "de.difuture.ekut.pht.lib"
-version = "0.1.8"
+version = "0.1.9"
 
 
 publishing {
@@ -81,7 +81,7 @@ publishing {
 
 model {
     tasks.generatePomFileForMavenPublication {
-        destination = file("$buildDir/libs/runtime-docker-spotify-0.1.8.pom")
+        destination = file("$buildDir/libs/runtime-docker-spotify-0.1.9.pom")
     }
 }
 
