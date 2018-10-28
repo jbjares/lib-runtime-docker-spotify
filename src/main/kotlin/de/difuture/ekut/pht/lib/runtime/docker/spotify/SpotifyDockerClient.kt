@@ -39,6 +39,8 @@ class SpotifyDockerClient : DockerRuntimeClient {
 
     private var closed = false
 
+    private var auth: RegistryAuth? = null
+
     /**
      * Translates the repoTag string to the corresponding unique Image ID
      */
@@ -130,9 +132,12 @@ class SpotifyDockerClient : DockerRuntimeClient {
         val repoTag = repo.resolve(tag, host)
 
         try {
-            // First: Pull
-            this.baseClient.pull(repoTag)
-            // Now return the image ID of this image
+
+            if (this.auth != null) {
+                this.baseClient.pull(repoTag, this.auth)
+            } else {
+                this.baseClient.pull(repoTag)
+            }
             this.repoTagToImageId(repoTag)
         } catch (ex: ImageNotFoundException) {
             throw NoSuchDockerImageException(ex, repo = repoTag)
@@ -156,8 +161,13 @@ class SpotifyDockerClient : DockerRuntimeClient {
     override fun login(username: String, password: String, host: String?): Boolean = unlessClosed {
 
         val builder = RegistryAuth.builder().username(username).password(password)
-        val auth = host?.let { builder.serverAddress(it) } ?: builder
-        this.baseClient.auth(auth.build()) == 200
+        val auth = (host?.let { builder.serverAddress(it) } ?: builder).build()
+
+        if (baseClient.auth(auth) == 200) {
+            this.auth = auth
+            return true
+        }
+        return false
     }
 
     override fun run(
