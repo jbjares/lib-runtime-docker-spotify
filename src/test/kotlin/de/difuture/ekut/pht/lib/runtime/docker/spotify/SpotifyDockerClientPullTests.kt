@@ -1,7 +1,7 @@
 package de.difuture.ekut.pht.lib.runtime.docker.spotify
 
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
-import jdregistry.client.data.DockerTag
+import jdregistry.client.data.Tag as DockerTag
 import org.junit.Assert
 import org.junit.Before
 import org.junit.Test

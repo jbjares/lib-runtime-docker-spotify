@@ -18,8 +18,8 @@ import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerImageException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerNetworkException
 import de.difuture.ekut.pht.lib.runtime.docker.params.DockerCommitOptionalParameters
 import de.difuture.ekut.pht.lib.runtime.docker.params.DockerRunOptionalParameters
-import jdregistry.client.data.DockerRepositoryName
-import jdregistry.client.data.DockerTag
+import jdregistry.client.data.RepositoryName as DockerRepositoryName
+import jdregistry.client.data.Tag as DockerTag
 import java.lang.IllegalStateException
 import java.nio.file.Path
 
@@ -36,11 +36,9 @@ import java.nio.file.Path
  */
 class SpotifyDockerClient : DockerRuntimeClient {
 
-    private companion object {
-        const val EXIT_STATUS = "exited"
-    }
-
     private val baseClient = DefaultDockerClient.fromEnv().build()
+
+    private var closed = false
 
     /**
      * Translates the repoTag string to the corresponding unique Image ID
@@ -52,17 +50,23 @@ class SpotifyDockerClient : DockerRuntimeClient {
             val repoTags = it.repoTags()
             repoTags != null && repoTag in repoTags
         }
-        return when (images.size) {
-
-            0 -> throw IllegalStateException("Implementation Error! No Image with repoTag '$repoTag' was found!")
-            1 -> DockerImageId(images.single().id())
-            else -> throw IllegalStateException("Implementation Error! Multiple images with repoTag '$repoTag' found")
-        }
+        return images.singleOrNull()?.let { DockerImageId(it.id()) }
+                ?: throw IllegalStateException("Implementation Error! Zero or more than one image found for $repoTag")
     }
 
     override fun close() {
 
+        this.closed = true
         this.baseClient.close()
+    }
+
+    private inline fun <T> unlessClosed(body: () -> T): T {
+
+        if (this.closed) {
+
+            throw IllegalStateException("This DockerRuntimeClient has been closed!")
+        }
+        return body()
     }
 
     override fun commitByRebase(
@@ -72,7 +76,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
         targetRepo: DockerRepositoryName,
         targetTag: DockerTag,
         optionalParams: DockerCommitOptionalParameters?
-    ): DockerImageId {
+    ): DockerImageId = unlessClosed {
 
         // Guard: check that all paths in the input are absolute
         exportFiles.forEach { if (!it.isAbsolute) throw IllegalArgumentException("File $it is not absolute") }
@@ -102,25 +106,26 @@ class SpotifyDockerClient : DockerRuntimeClient {
         // 3. Create the new image from the container
         this.baseClient.commitContainer(
                     containerId.repr,
-                    targetRepo.asString(),
+                    targetRepo.repr,
                             targetTag.repr,
                             ContainerConfig.builder().build(),
                             optionalParams?.comment,
                             optionalParams?.author)
-        return this.repoTagToImageId(targetRepo.resolve(targetTag))
+        this.repoTagToImageId(targetRepo.resolve(targetTag))
     }
 
-    override fun images() =
+    override fun images() = unlessClosed {
 
-            try {
-                baseClient.listImages().map { DockerImageId(it.id()) }
+        try {
+            baseClient.listImages().map { DockerImageId(it.id()) }
 
-                // rethrow DockerException, such that no Spotify Exception leaves this class
-            } catch (ex: DockerException) {
-                throw DockerRuntimeClientException(ex)
-            }
+            // rethrow DockerException, such that no Spotify Exception leaves this class
+        } catch (ex: DockerException) {
+            throw DockerRuntimeClientException(ex)
+        }
+    }
 
-    override fun pull(repo: DockerRepositoryName, tag: DockerTag, host: String?): DockerImageId {
+    override fun pull(repo: DockerRepositoryName, tag: DockerTag, host: String?): DockerImageId = unlessClosed {
 
         // The Spotify Docker Client only understands the ':' syntax for images and tags
         val repoTag = repo.resolve(tag, host)
@@ -129,7 +134,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
             // First: Pull
             this.baseClient.pull(repoTag)
             // Now return the image ID of this image
-            return this.repoTagToImageId(repoTag)
+            this.repoTagToImageId(repoTag)
         } catch (ex: ImageNotFoundException) {
             throw NoSuchDockerImageException(ex, repo = repoTag)
         } catch (ex: DockerException) {
@@ -137,7 +142,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
         }
     }
 
-    override fun push(repo: DockerRepositoryName, tag: DockerTag, host: String?) {
+    override fun push(repo: DockerRepositoryName, tag: DockerTag, host: String?) = unlessClosed {
 
         val repoTag = repo.resolve(tag, host)
         try {
@@ -149,11 +154,11 @@ class SpotifyDockerClient : DockerRuntimeClient {
         }
     }
 
-    override fun login(username: String, password: String, host: String?): Boolean {
+    override fun login(username: String, password: String, host: String?): Boolean = unlessClosed {
 
         val builder = RegistryAuth.builder().username(username).password(password)
         val auth = host?.let { builder.serverAddress(it) } ?: builder
-        return this.baseClient.auth(auth.build()) == 200
+        this.baseClient.auth(auth.build()) == 200
     }
 
     override fun run(
@@ -161,7 +166,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
         commands: List<String>,
         rm: Boolean,
         optionalParams: DockerRunOptionalParameters?
-    ): DockerContainerOutput {
+    ): DockerContainerOutput = unlessClosed {
 
         // Before we even try to create the Container, check whether the Docker Network actually exists
         val networkId = optionalParams?.networkId
@@ -226,7 +231,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
                 // I use collection operations here, because I do not understand how the parameter of listContainers works
                 val container = baseClient.listContainers().first { it.id() == containerId }
 
-                while (container.status() != EXIT_STATUS) {
+                while (container.status() != "exited") {
 
                     if (interruptSignaler.wasInterrupted(containerIdObj)) {
 
@@ -247,7 +252,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
                 baseClient.removeContainer(containerId)
             }
 
-            return DockerContainerOutput(
+            DockerContainerOutput(
                     containerIdObj,
                     exit.statusCode().toInt(),
                     stdout,
@@ -268,7 +273,7 @@ class SpotifyDockerClient : DockerRuntimeClient {
         targetRepo: DockerRepositoryName,
         targetTag: DockerTag,
         host: String?
-    ) {
+    ) = unlessClosed {
         try {
             this.baseClient.tag(imageId.repr, targetRepo.resolve(targetTag, host))
         } catch (ex: DockerException) {
