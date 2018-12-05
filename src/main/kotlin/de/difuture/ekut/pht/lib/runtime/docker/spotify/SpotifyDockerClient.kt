@@ -10,26 +10,27 @@ import com.spotify.docker.client.messages.RegistryAuth
 import de.difuture.ekut.pht.lib.data.DockerContainerId
 import de.difuture.ekut.pht.lib.data.DockerContainerOutput
 import de.difuture.ekut.pht.lib.data.DockerImageId
-import de.difuture.ekut.pht.lib.data.asKeyValueList
 import de.difuture.ekut.pht.lib.runtime.docker.CreateDockerContainerFailedException
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClient
 import de.difuture.ekut.pht.lib.runtime.docker.DockerRuntimeClientException
 import de.difuture.ekut.pht.lib.runtime.docker.NoSuchDockerImageException
 import de.difuture.ekut.pht.lib.runtime.docker.params.DockerCommitOptionalParameters
 import de.difuture.ekut.pht.lib.runtime.docker.params.DockerRunOptionalParameters
+import kotlinext.map.asKeyValueList
+import java.lang.IllegalArgumentException
 import jdregistry.client.data.RepositoryName as DockerRepositoryName
 import jdregistry.client.data.Tag as DockerTag
 import java.lang.IllegalStateException
 import java.nio.file.Path
 
 /**
- * Spotify-client-based implementation of the [DockerClient] interface.
+ * Spotify-client-based implementation of the [DockerRuntimeClient] interface.
  *
- * This implementation entirely encapsulates completely the base Docker client related properties. For instance,
- * all Spotify related exceptions are converted to exceptions from the library
+ * This implementation encapsulates completely the base Docker client related properties.
+ * For instance, all Spotify related exceptions are converted to exceptions from the library
  *
  * @author Lukas Zimmermann
- * @see IDockerClient
+   @see DockerRuntimeClient
  * @since 0.0.1
  *
  */
@@ -38,39 +39,6 @@ class SpotifyDockerClient : DockerRuntimeClient {
     private val baseClient = DefaultDockerClient.fromEnv().build()
     private var closed = false
     private var auth: RegistryAuth? = null
-
-    /**
-     * Translates the repoTag string to the corresponding unique Image ID
-     */
-    private fun repoTagToImageId(repoTag: String): DockerImageId {
-
-        val images = baseClient.listImages().filter {
-
-            val repoTags = it.repoTags()
-            repoTags != null && repoTag in repoTags
-        }
-        return images.singleOrNull()?.let { DockerImageId(it.id()) }
-                ?: throw IllegalStateException("Implementation Error! Zero or more than one image found for $repoTag")
-    }
-
-    override fun close() {
-
-        this.closed = true
-        this.baseClient.close()
-    }
-
-    private inline fun <T> unlessClosed(body: () -> T): T {
-
-        if (this.closed) {
-
-            throw IllegalStateException("This DockerRuntimeClient has been closed!")
-        }
-        try {
-            return body()
-        } catch (ex: DockerException) {
-            throw DockerRuntimeClientException(ex)
-        }
-    }
 
     override fun commitByRebase(
         containerId: DockerContainerId,
@@ -82,11 +50,13 @@ class SpotifyDockerClient : DockerRuntimeClient {
     ): DockerImageId = unlessClosed {
 
         // Guard: check that all paths in the input are absolute
-        exportFiles.forEach { if (!it.isAbsolute) throw IllegalArgumentException("File $it is not absolute") }
+        exportFiles.firstOrNull { ! it.isAbsolute }?.run {
+            throw IllegalArgumentException("Export Path not absolute: $this")
+        }
 
         // 1. First, create a new container from the baseImage in which the files should be copied into
         val targetContainerId = ContainerConfig.builder().image(from).build().let { config ->
-            this.baseClient.createContainer(config).id()
+            baseClient.createContainer(config).id()
                     ?: throw DockerRuntimeClientException("Creation of Docker Container failed!")
         }
 
@@ -94,22 +64,20 @@ class SpotifyDockerClient : DockerRuntimeClient {
         for (path in exportFiles) {
 
             val file = path.toFile()
-            val absolutePath = file.absolutePath
 
-            this.baseClient.archiveContainer(containerId.repr, absolutePath).use { inputStream ->
-
-                this.baseClient.copyToContainer(inputStream, targetContainerId, file.parentFile.absolutePath)
+            baseClient.archiveContainer(containerId.repr, file.absolutePath).use { inputStream ->
+                baseClient.copyToContainer(inputStream, targetContainerId, file.parentFile.absolutePath)
             }
         }
 
         // 3. Create the new image from the container
-        this.baseClient.commitContainer(
-                    containerId.repr,
-                    targetRepo.repr,
-                            targetTag.repr,
-                            ContainerConfig.builder().build(),
-                            optionalParams?.comment,
-                            optionalParams?.author)
+        baseClient.commitContainer(
+                containerId.repr,
+                targetRepo.repr,
+                targetTag.repr,
+                ContainerConfig.builder().build(),
+                optionalParams?.comment,
+                optionalParams?.author)
 
         // 4 Remove the created container
         baseClient.stopContainer(targetContainerId, 20)
@@ -122,7 +90,6 @@ class SpotifyDockerClient : DockerRuntimeClient {
     }
 
     override fun images() = unlessClosed {
-
             baseClient.listImages().map { DockerImageId(it.id()) }
     }
 
@@ -271,5 +238,34 @@ class SpotifyDockerClient : DockerRuntimeClient {
     ) = unlessClosed {
 
             this.baseClient.tag(imageId.repr, targetRepo.resolve(targetTag, host))
+    }
+
+    /**
+     * Translates the repoTag string to the corresponding unique Image ID
+     */
+    private fun repoTagToImageId(repoTag: String): DockerImageId {
+        val images = baseClient.listImages().filter {
+
+            val repoTags = it.repoTags()
+            repoTags != null && repoTag in repoTags
+        }
+        return images.singleOrNull()?.let { DockerImageId(it.id()) }
+                ?: throw IllegalStateException("Implementation Error! Zero or more than one image found for $repoTag")
+    }
+
+    override fun close() {
+        closed = true
+        baseClient.close()
+    }
+
+    private inline fun <T> unlessClosed(body: () -> T): T {
+        if (closed) {
+            throw IllegalStateException("This DockerRuntimeClient has been closed!")
+        }
+        try {
+            return body()
+        } catch (ex: DockerException) {
+            throw DockerRuntimeClientException(ex)
+        }
     }
 }
